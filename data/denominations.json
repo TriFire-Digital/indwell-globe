@@ -1,0 +1,199 @@
+{
+  "Buddhism": [
+    {
+      "id": 32,
+      "name": "Buddhism",
+      "count": 111991
+    },
+    {
+      "id": 23,
+      "name": "Buddhist",
+      "count": 77913
+    }
+  ],
+  "Christianity": [
+    {
+      "id": 0,
+      "name": "Catholic",
+      "count": 423465
+    },
+    {
+      "id": 1,
+      "name": "Baptist",
+      "count": 172076
+    },
+    {
+      "id": 2,
+      "name": "Protestant",
+      "count": 129383
+    },
+    {
+      "id": 3,
+      "name": "Pentecostal",
+      "count": 118627
+    },
+    {
+      "id": 4,
+      "name": "Eastern Orthodox",
+      "count": 68484
+    },
+    {
+      "id": 5,
+      "name": "Evangelical",
+      "count": 52219
+    },
+    {
+      "id": 6,
+      "name": "Methodist",
+      "count": 51347
+    },
+    {
+      "id": 7,
+      "name": "Lutheran",
+      "count": 45633
+    },
+    {
+      "id": 8,
+      "name": "Anglican",
+      "count": 44140
+    },
+    {
+      "id": 9,
+      "name": "Other Christian",
+      "count": 22397
+    },
+    {
+      "id": 10,
+      "name": "Adventist",
+      "count": 21517
+    },
+    {
+      "id": 11,
+      "name": "Reformed",
+      "count": 21328
+    },
+    {
+      "id": 12,
+      "name": "Restoration",
+      "count": 20586
+    },
+    {
+      "id": 13,
+      "name": "Presbyterian",
+      "count": 15468
+    },
+    {
+      "id": 17,
+      "name": "Holiness",
+      "count": 6430
+    },
+    {
+      "id": 18,
+      "name": "Orthodox",
+      "count": 6421
+    },
+    {
+      "id": 20,
+      "name": "Latter-day Saints",
+      "count": 4670
+    },
+    {
+      "id": 21,
+      "name": "Anabaptist",
+      "count": 4093
+    },
+    {
+      "id": 22,
+      "name": "Liberal Protestant",
+      "count": 3266
+    },
+    {
+      "id": 24,
+      "name": "Charismatic",
+      "count": 1900
+    },
+    {
+      "id": 26,
+      "name": "Salvation Army",
+      "count": 1326
+    },
+    {
+      "id": 27,
+      "name": "Restorationist",
+      "count": 1088
+    },
+    {
+      "id": 28,
+      "name": "Jehovah's Witnesses",
+      "count": 908
+    },
+    {
+      "id": 29,
+      "name": "Quaker",
+      "count": 890
+    },
+    {
+      "id": 34,
+      "name": "Non-denominational",
+      "count": 196
+    }
+  ],
+  "Hinduism": [
+    {
+      "id": 33,
+      "name": "Hinduism",
+      "count": 125493
+    },
+    {
+      "id": 16,
+      "name": "Hindu",
+      "count": 56059
+    }
+  ],
+  "Islam": [
+    {
+      "id": 14,
+      "name": "Islam",
+      "count": 453457
+    }
+  ],
+  "Judaism": [
+    {
+      "id": 19,
+      "name": "Jewish",
+      "count": 12128
+    },
+    {
+      "id": 31,
+      "name": "Judaism",
+      "count": 7096
+    }
+  ],
+  "Other": [
+    {
+      "id": 15,
+      "name": "Unknown",
+      "count": 14597
+    },
+    {
+      "id": 25,
+      "name": "Sikh",
+      "count": 1800
+    },
+    {
+      "id": 30,
+      "name": "Other",
+      "count": 876
+    },
+    {
+      "id": 35,
+      "name": "Bah\u00e1'\u00ed",
+      "count": 182
+    },
+    {
+      "id": 36,
+      "name": "Shinto",
+      "count": 33
+    }
+  ]
+}

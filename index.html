@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Indwell — Global Religious Influence Map</title>
+<link href="https://unpkg.com/maplibre-gl@5.20.1/dist/maplibre-gl.css" rel="stylesheet" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #08080a; color: #e5e5e5; font-family: 'Inter', -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  #map { width: 100vw; height: 100vh; position: relative; z-index: 1; background: transparent !important; }
+
+  /* ── Starfield background ────────────────────────── */
+  #starfield {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, #0a0a12 0%, #030308 100%);
+  }
+  #starfield canvas { width: 100%; height: 100%; }
+
+  /* ── Top bar ─────────────────────────────────────── */
+  #top-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; pointer-events: none;
+  }
+  #top-bar > * { pointer-events: auto; }
+  .logo { font-size: 18px; font-weight: 600; letter-spacing: 0.03em; color: #fff; text-decoration: none; }
+  .logo span { color: #444; font-weight: 300; margin-left: 8px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .stats-row { display: flex; gap: 20px; }
+  .stat-item { text-align: right; }
+  .stat-value { font-size: 13px; font-weight: 500; color: #fff; font-variant-numeric: tabular-nums; }
+  .stat-label { font-size: 8px; color: #555; text-transform: uppercase; letter-spacing: 0.12em; margin-top: 1px; }
+
+  /* ── Filter panel ────────────────────────────────── */
+  #filter-panel {
+    position: fixed; top: 58px; left: 14px; z-index: 20;
+    background: rgba(12,12,14,0.92); backdrop-filter: blur(24px) saturate(1.2);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 14px;
+    padding: 16px 18px; width: 240px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    max-height: calc(100vh - 80px); overflow-y: auto;
+    transition: transform 0.35s cubic-bezier(.4,0,.2,1);
+  }
+  #filter-panel::-webkit-scrollbar { width: 3px; }
+  #filter-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  .panel-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: #444; margin-bottom: 12px; font-weight: 500; }
+  .filter-group { margin-bottom: 14px; }
+  .filter-group:last-child { margin-bottom: 0; }
+  .filter-group-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: #3a3a3a; margin-bottom: 6px; font-weight: 500; }
+  .mode-toggle { display: flex; gap: 2px; background: rgba(255,255,255,0.04); border-radius: 6px; padding: 2px; margin-bottom: 12px; flex-wrap: wrap; }
+  .mode-btn {
+    flex: 1; min-width: 48px; padding: 7px 4px; font-size: 10px; text-align: center; border: none;
+    background: transparent; color: #666; border-radius: 5px; cursor: pointer;
+    font-family: inherit; transition: all 0.2s; letter-spacing: 0.02em;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mode-btn.active { background: rgba(255,255,255,0.1); color: #fff; }
+  .filter-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; cursor: pointer; user-select: none; transition: opacity 0.2s;
+    -webkit-tap-highlight-color: transparent; min-height: 36px;
+  }
+  .filter-item.off { opacity: 0.25; }
+  .filter-item.highlighted { opacity: 1; }
+  .filter-item.dimmed { opacity: 0.35; }
+  .filter-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .filter-label { font-size: 12px; color: #bbb; flex: 1; }
+  .filter-count { font-size: 10px; color: #444; font-variant-numeric: tabular-nums; }
+  .hint-text { font-size: 10px; color: #333; line-height: 1.5; margin-top: 2px; }
+  /* ── Info panel ──────────────────────────────────── */
+  #info-panel {
+    position: fixed; top: 58px; right: 14px; z-index: 20;
+    background: rgba(12,12,14,0.92); backdrop-filter: blur(24px) saturate(1.2);
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 14px;
+    padding: 18px 20px; width: 260px; max-width: calc(100vw - 28px);
+    opacity: 0; transform: translateY(8px);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  #info-panel.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .info-h3 { font-size: 9px; color: #333; font-family: monospace; margin-bottom: 8px; word-break: break-all; }
+  .info-score { font-size: 28px; font-weight: 700; color: #fff; line-height: 1; }
+  .info-score-label { font-size: 8px; color: #444; text-transform: uppercase; letter-spacing: 0.12em; margin-top: 2px; margin-bottom: 12px; }
+  .info-row { display: flex; justify-content: space-between; padding: 3px 0; }
+  .info-row-label { font-size: 11px; color: #777; }
+  .info-row-value { font-size: 11px; color: #ccc; }
+  .info-divider { border: none; border-top: 1px solid rgba(255,255,255,0.05); margin: 8px 0; }
+  .info-bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .info-bar-swatch { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+  .info-bar-name { font-size: 10px; color: #777; width: 70px; }
+  .info-bar-count { font-size: 9px; color: #555; width: 38px; text-align: right; }
+  .info-bar-track { flex: 1; height: 3px; background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; }
+  .info-bar-fill { height: 100%; border-radius: 2px; }
+
+  /* ── Controls ────────────────────────────────────── */
+  #zoom-indicator { position: fixed; bottom: 100px; right: 14px; z-index: 20; font-size: 9px; color: #444; text-transform: uppercase; letter-spacing: 0.1em; }
+  #bottom-bar {
+    position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 20;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center;
+    background: rgba(12,12,14,0.75); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 16px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .legend-name { font-size: 9px; color: #555; white-space: nowrap; }
+
+  /* ── Mobile filter toggle ────────────────────────── */
+  #filter-toggle {
+    display: none; position: fixed; bottom: 55px; left: 14px; z-index: 22;
+    width: 46px; height: 46px; border-radius: 12px;
+    background: rgba(12,12,14,0.92); border: 1px solid rgba(255,255,255,0.1);
+    color: #aaa; font-size: 18px; cursor: pointer;
+    backdrop-filter: blur(16px); box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    align-items: center; justify-content: center;
+  }
+  #sheet-backdrop {
+    display: none; position: fixed; inset: 0; z-index: 19;
+    background: rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  }
+  #sheet-backdrop.visible { opacity: 1; pointer-events: auto; }
+  .sheet-handle { display: none; width: 36px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; margin: 0 auto 12px; }
+  .panel-close {
+    display: none; position: absolute; top: 12px; right: 14px;
+    background: none; border: none; color: #666; font-size: 20px; cursor: pointer;
+    width: 36px; height: 36px; border-radius: 8px;
+  }
+
+  /* ── Loading ─────────────────────────────────────── */
+  #loading {
+    position: fixed; inset: 0; z-index: 100; background: #08080a;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: opacity 0.8s ease;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  .loading-logo { font-size: 28px; font-weight: 600; color: #fff; margin-bottom: 24px; }
+  .loading-bar { width: 180px; height: 1px; background: rgba(255,255,255,0.08); border-radius: 1px; overflow: hidden; }
+  .loading-fill { height: 100%; width: 0%; background: #fff; transition: width 0.4s; }
+  .loading-text { margin-top: 14px; font-size: 10px; color: #333; letter-spacing: 0.08em; text-transform: uppercase; }
+  #tile-toast { position: fixed; bottom: 50px; right: 14px; z-index: 25; font-size: 10px; color: #555; opacity: 0; transition: opacity 0.3s; }
+  #tile-toast.visible { opacity: 1; }
+
+  /* ── Mobile ──────────────────────────────────────── */
+  @media (max-width: 768px) {
+    #top-bar { padding: 10px 14px; }
+    .logo { font-size: 15px; }
+    .logo span { display: none; }
+    .stats-row { gap: 12px; }
+    .stat-value { font-size: 11px; }
+    #filter-toggle { display: flex; }
+    #filter-panel {
+      position: fixed; top: auto; bottom: 0; left: 0; right: 0;
+      width: 100%; max-height: 70vh; border-radius: 16px 16px 0 0;
+      transform: translateY(100%); padding: 12px 18px 24px; z-index: 30;
+    }
+    #filter-panel.open { transform: translateY(0); }
+    #sheet-backdrop { display: block; }
+    .sheet-handle { display: block; }
+    .panel-close { display: flex; align-items: center; justify-content: center; }
+    #info-panel { top: auto; bottom: 50px; right: 10px; left: 10px; width: auto; max-width: none; padding: 14px 16px; }
+    #bottom-bar { padding: 6px 12px; gap: 8px; }
+    .legend-name { font-size: 8px; }
+  }
+  @media (max-width: 420px) {
+    .info-score { font-size: 22px; }
+    #info-panel { bottom: 45px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="loading-logo">Indwell</div>
+  <div class="loading-bar"><div class="loading-fill" id="loading-fill"></div></div>
+  <div class="loading-text" id="loading-text">Loading influence data</div>
+</div>
+
+<div id="top-bar">
+  <a href="https://trifire.digital" target="_blank" class="logo">Indwell<span>Influence Map</span></a>
+  <div class="stats-row">
+    <div class="stat-item"><div class="stat-value" id="stat-zones">&mdash;</div><div class="stat-label">Zones</div></div>
+    <div class="stat-item"><div class="stat-value" id="stat-orgs">&mdash;</div><div class="stat-label">Orgs</div></div>
+    <div class="stat-item"><div class="stat-value" id="stat-visible">&mdash;</div><div class="stat-label">Visible</div></div>
+  </div>
+</div>
+
+<div id="filter-panel">
+  <div class="sheet-handle"></div>
+  <button class="panel-close" id="panel-close">&times;</button>
+  <div class="panel-title">Filters</div>
+  <div class="filter-group">
+    <div class="filter-group-label">View</div>
+    <div class="mode-toggle" id="view-toggle">
+      <button class="mode-btn active" data-view="hex">Hex</button>
+      <button class="mode-btn" data-view="highlight">Highlight</button>
+    </div>
+  </div>
+  <div class="filter-group">
+    <div class="filter-group-label">Order</div>
+    <div class="mode-toggle" id="order-toggle">
+      <button class="mode-btn" data-order="dom-min">Dom → Min</button>
+      <button class="mode-btn active" data-order="min-dom">Min → Dom</button>
+    </div>
+  </div>
+  <div class="filter-group">
+    <div class="filter-group-label">Religion</div>
+    <div id="religion-filters"></div>
+    <div class="hint-text" id="filter-hint">Toggle religions on/off</div>
+  </div>
+  <div class="filter-group">
+    <div class="filter-group-label">Min Avg Score</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+      <input type="range" id="score-slider" min="0" max="80" value="0" style="flex:1;accent-color:#fff;height:2px;" />
+      <span id="score-value" style="font-size:11px;color:#555;width:24px;text-align:right;">0</span>
+    </div>
+  </div>
+</div>
+
+<button id="filter-toggle" aria-label="Open filters">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M6 12h12M8 18h8"/></svg>
+</button>
+<div id="sheet-backdrop"></div>
+
+<div id="info-panel">
+  <div class="info-h3" id="info-h3"></div>
+  <div class="info-score" id="info-score"></div>
+  <div class="info-score-label" id="info-score-label">Total Influence Score</div>
+  <div class="info-row"><span class="info-row-label">Avg Score</span><span class="info-row-value" id="info-avg"></span></div>
+  <div class="info-row"><span class="info-row-label">Organizations</span><span class="info-row-value" id="info-orgs"></span></div>
+  <div class="info-row"><span class="info-row-label">Dominant</span><span class="info-row-value" id="info-dominant"></span></div>
+  <hr class="info-divider" />
+  <div class="panel-title" style="margin-bottom:8px;">Religion Breakdown</div>
+  <div id="info-bars"></div>
+</div>
+
+<div id="zoom-indicator">Globe</div>
+<div id="bottom-bar">
+  <div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div><div class="legend-name">Christianity</div></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#EF4444"></div><div class="legend-name">Islam</div></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#EAB308"></div><div class="legend-name">Judaism</div></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#F97316"></div><div class="legend-name">Hinduism</div></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#22C55E"></div><div class="legend-name">Buddhism</div></div>
+  <div class="legend-item"><div class="legend-dot" style="background:#A855F7"></div><div class="legend-name">Other</div></div>
+</div>
+<div id="tile-toast"></div>
+<div id="starfield"></div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/maplibre-gl@5.20.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/h3-js@3.7.2/dist/h3-js.umd.js"></script>
+<script>
+(async function () {
+  /* ── Constants ───────────────────────────────────── */
+  const DEG = Math.PI / 180, RAD = 180 / Math.PI;
+  const DARK_STYLE = {version:8,name:'Dark',glyphs:'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    sources:{'carto':{type:'raster',tiles:['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png','https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png','https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],tileSize:256,maxzoom:20,attribution:'© OpenStreetMap © CARTO'}},
+    layers:[{id:'carto-dark',type:'raster',source:'carto'}],
+    sky:{
+      'sky-color':'#030308','horizon-color':'#030308','fog-color':'#030308',
+      'sky-horizon-blend':1,'horizon-fog-blend':1,'fog-ground-blend':1
+    }};
+  const COLORS = { Christianity:'#3B82F6', Islam:'#EF4444', Judaism:'#EAB308', Hinduism:'#F97316', Buddhism:'#22C55E', Other:'#A855F7' };
+  const COLOR_ARR = ['#3B82F6','#EF4444','#EAB308','#F97316','#22C55E','#A855F7'];
+  const REL = ['Christianity','Islam','Judaism','Hinduism','Buddhism','Other'];
+  const TILE_SIZE = 10;
+  const IS_MOBILE = window.innerWidth < 769;
+
+  function hs(prop) {
+    const stops=[0,6000000, 2,3000000, 4,900000, 6,225000, 8,60000, 10,12000, 12,2250, 15,450];
+    const out=['interpolate',['exponential',1.5],['zoom']];
+    for(let i=0;i<stops.length;i+=2){ out.push(stops[i]); out.push(['*',['get',prop],stops[i+1]]); }
+    return out;
+  }
+  function hsStack(prop) {
+    const stops=[0,6000000, 2,3000000, 4,900000, 6,225000, 8,60000, 10,12000, 12,2250, 15,450];
+    const out=['interpolate',['exponential',1.5],['zoom']];
+    for(let i=0;i<stops.length;i+=2){ out.push(stops[i]); out.push(['*',['get',prop],stops[i+1]]); }
+    return out;
+  }
+
+  /* ── State ───────────────────────────────────────── */
+  let viewMode = 'hex', activeReligions = new Set(REL), highlightedReligion = null;
+  let scoreThreshold = 0, maxScore = 1, totalOrgs = 0;
+  let allZones = [], tileIndex = {}, denomIdMap = {};
+  let zonesGJ = null, centGJ = null, map = null;
+  let isRotating = true, lastSpin = 0;
+  let stackOrder = 'min-dom';
+  let loadedTiles = {}, loadingTiles = new Set();
+  let orgsGJ = { type:'FeatureCollection', features:[] };
+
+  /* ── Loading ─────────────────────────────────────── */
+  const fill = document.getElementById('loading-fill');
+  const loadText = document.getElementById('loading-text');
+  function setL(p,m){ fill.style.width=p+'%'; if(m) loadText.textContent=m; }
+
+  /* ── Fetch zone data + star catalog ────────────── */
+  setL(10,'Fetching zone & star data');
+  const [zR,tR,sR] = await Promise.all([fetch('data/zones.json'),fetch('data/tile_index.json'),fetch('data/stars.json')]);
+  setL(40,'Parsing');
+  allZones = await zR.json();
+  const tD = await tR.json(); tileIndex = tD.tiles;
+  const starCatalog = await sR.json(); /* [[ra, dec, mag, ci], ...] */
+  try { denomIdMap = await (await fetch('data/denom_ids.json')).json(); } catch(e){}
+  maxScore = Math.max(...allZones.map(z=>z.ts));
+  const relCounts = {};
+  for(const z of allZones){ totalOrgs+=z.n; for(const[r,c] of Object.entries(z.rel)) relCounts[r]=(relCounts[r]||0)+c; }
+
+  /* ── Build GeoJSON ───────────────────────────────── */
+  setL(55,'Building hex polygons');
+  function buildGJ(){
+    const feats=[], cents=[];
+    for(const z of allZones){
+      if(!z.h3||!h3.h3IsValid(z.h3)) continue;
+      let bnd = h3.h3ToGeoBoundary(z.h3, true);
+      for(let i=1;i<bnd.length;i++){
+        while(bnd[i][0]-bnd[i-1][0]>180) bnd[i][0]-=360;
+        while(bnd[i][0]-bnd[i-1][0]<-180) bnd[i][0]+=360;
+      }
+      bnd.push(bnd[0]);
+      const rc=REL.map(r=>z.rel[r]||0), n=z.n||1, norm=z.ts/maxScore;
+      const p={h3:z.h3,ts:z.ts,as:z.as,n,dr:z.dr,di:REL.indexOf(z.dr),norm};
+      let cum=0;
+      for(let i=0;i<6;i++){
+        p['r'+i]=rc[i];
+        const frac=rc[i]/n;
+        p['b'+i]=+(cum*norm).toFixed(6);
+        cum+=frac;
+        p['t'+i]=+(cum*norm).toFixed(6);
+      }
+      feats.push({type:'Feature',geometry:{type:'Polygon',coordinates:[bnd]},properties:p});
+      cents.push({type:'Feature',geometry:{type:'Point',coordinates:[z.c[0],z.c[1]]},properties:{ts:z.ts,as:z.as,n,norm}});
+    }
+    zonesGJ={type:'FeatureCollection',features:feats};
+    centGJ={type:'FeatureCollection',features:cents};
+  }
+  buildGJ();
+
+  /* ── Filter UI ───────────────────────────────────── */
+  setL(65,'Building interface');
+  const filtersEl=document.getElementById('religion-filters'), filterItems={};
+  for(const rel of REL){
+    const cnt=relCounts[rel]||0, item=document.createElement('div');
+    item.className='filter-item';
+    item.innerHTML=`<div class="filter-swatch" style="background:${COLORS[rel]}"></div><div class="filter-label">${rel}</div><div class="filter-count">${fmtNum(cnt)}</div>`;
+    item.addEventListener('click',()=>onFilterClick(rel));
+    filtersEl.appendChild(item); filterItems[rel]=item;
+  }
+  document.getElementById('stat-zones').textContent=fmtNum(allZones.length);
+  document.getElementById('stat-orgs').textContent=fmtNum(totalOrgs);
+
+  /* ── Real starfield ─────────────────────────────── */
+  setL(70,'Initializing starfield');
+  /*
+   * Approach: Stars are projected onto a scrolling celestial sphere background.
+   * RA (0-24h) maps to a horizontal position (like longitude), Dec (-90 to +90)
+   * maps to a vertical position (like latitude). The canvas scrolls based on the
+   * map's center lng/lat + bearing/pitch, so stars move naturally as the globe rotates.
+   *
+   */
+  const starData = starCatalog.map(([ra, dec, mag, ci]) => {
+    /* RA hours → fraction of full circle [0, 1) */
+    const xFrac = ra / 24;
+    /* Dec → fraction [-0.5, 0.5] */
+    const yFrac = dec / 180;
+    /* Magnitude → visual */
+    const brightFrac = Math.max(0, 1 - (mag + 1.5) / 7.5);
+    const radius = 0.25 + brightFrac * 2.0;
+    const alpha = Math.max(0.1, Math.min(1.0, brightFrac * 1.05 + 0.08));
+    /* Color index → RGB */
+    let r=255, g=255, b=255;
+    if (ci < -0.1) { r=Math.round(170+ci*50); g=Math.round(195+ci*30); b=255; }
+    else if (ci < 0.3) { r=255; g=255; b=Math.round(255-ci*90); }
+    else if (ci < 0.8) { r=255; g=Math.round(255-(ci-0.3)*110); b=Math.round(Math.max(50, 180-ci*200)); }
+    else { r=255; g=Math.round(Math.max(130,215-(ci-0.8)*170)); b=Math.round(Math.max(50,120-(ci-0.8)*180)); }
+    r=Math.max(0,Math.min(255,r)); g=Math.max(0,Math.min(255,g)); b=Math.max(0,Math.min(255,b));
+    return { xFrac, yFrac, radius, alpha, r, g, b, mag };
+  });
+
+  (function initStarfield(){
+    const el = document.getElementById('starfield');
+    const cvs = document.createElement('canvas');
+    const ctx = cvs.getContext('2d');
+    el.appendChild(cvs);
+    let cw, ch;
+
+    function resize(){
+      cw = cvs.width = window.innerWidth * devicePixelRatio;
+      ch = cvs.height = window.innerHeight * devicePixelRatio;
+      cvs.style.width = '100%'; cvs.style.height = '100%';
+    }
+
+    window._drawStars = function() {
+      ctx.fillStyle = '#030308';
+      ctx.fillRect(0, 0, cw, ch);
+      if (!map) return;
+
+      const center = map.getCenter();
+      const dpr = devicePixelRatio;
+      /*
+       * Scroll offsets: map center lng drives horizontal scroll (like the old bearing-based shift),
+       * map center lat + pitch drive vertical scroll.
+       * Bearing adds additional horizontal rotation.
+       * The multiplier controls parallax speed — 2.5× means the star sphere
+       * wraps once per 144° of globe rotation, giving a nice sense of depth.
+       */
+      const scrollX = ((center.lng + map.getBearing()) / 360) * cw * 2.5;
+      const scrollY = ((center.lat + map.getPitch()) / 180) * ch * 2.5;
+
+      for (const s of starData) {
+        /* Canvas position with scrolling + wrapping */
+        let sx = ((s.xFrac * cw * 2.5 + scrollX) % cw + cw) % cw;
+        let sy = ((s.yFrac * ch * 2.5 + scrollY) % ch + ch) % ch;
+
+        const finalAlpha = s.alpha;
+        const rad = s.radius * dpr;
+
+        ctx.beginPath();
+        ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${s.r},${s.g},${s.b},${finalAlpha.toFixed(2)})`;
+        ctx.fill();
+
+        /* Glow for bright stars */
+        if (s.mag < 1.5) {
+          ctx.beginPath();
+          ctx.arc(sx, sy, rad * 3, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${s.r},${s.g},${s.b},${(finalAlpha * 0.06).toFixed(3)})`;
+          ctx.fill();
+        }
+      }
+    };
+    resize();
+    window._drawStars();
+    window.addEventListener('resize', () => { resize(); if (map) window._drawStars(); });
+  })();
+
+  /* ── Map init ────────────────────────────────────── */
+  setL(75,'Initializing map');
+  map=new maplibregl.Map({container:'map',style:DARK_STYLE,center:[0,20],zoom:1.5,pitch:35,canvasContextAttributes:{antialias:true},attributionControl:false,maxPitch:70,projection:{type:'globe'}});
+  window._map=map; window._zonesGJ=zonesGJ;
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),'bottom-right');
+
+  map.on('render',()=>{ if(window._drawStars) window._drawStars(); });
+
+  map.on('load',()=>{
+    setL(85,'Adding layers');
+    try{map.setProjection({type:'globe'});}catch(e){}
+    map.addSource('zones',{type:'geojson',data:zonesGJ});
+    map.addSource('orgs',{type:'geojson',data:orgsGJ});
+
+    /* ── Hex extrusion ─────────────────────────────── */
+    map.addLayer({id:'hex-extrusion',type:'fill-extrusion',source:'zones',
+      paint:{
+        'fill-extrusion-color':['match',['get','di'],0,'#3B82F6',1,'#EF4444',2,'#EAB308',3,'#F97316',4,'#22C55E','#A855F7'],
+        'fill-extrusion-height':hs('norm'),
+        'fill-extrusion-base':0,
+        'fill-extrusion-opacity':0.82,
+        'fill-extrusion-vertical-gradient':true
+      },layout:{visibility:'visible'}});
+
+    /* ── Stacked layers ────────────────────────────── */
+    for(let i=0;i<6;i++){
+      map.addLayer({id:'stacked-'+i,type:'fill-extrusion',source:'zones',
+        filter:['>',['get','r'+i],0],
+        paint:{
+          'fill-extrusion-color':COLOR_ARR[i],
+          'fill-extrusion-height':hsStack('t'+i),
+          'fill-extrusion-base':hsStack('b'+i),
+          'fill-extrusion-opacity':0.85,
+          'fill-extrusion-vertical-gradient':true
+        },layout:{visibility:'none'}});
+    }
+
+    /* ── Highlight layer ───────────────────────────── */
+    map.addLayer({id:'highlight-extrusion',type:'fill-extrusion',source:'zones',
+      filter:['==',['get','dr'],'__none__'],
+      paint:{
+        'fill-extrusion-color':'#3B82F6',
+        'fill-extrusion-height':hs('norm'),
+        'fill-extrusion-base':0,
+        'fill-extrusion-opacity':0.7,
+        'fill-extrusion-vertical-gradient':true
+      },layout:{visibility:'none'}});
+
+    /* ── Org dots ──────────────────────────────────── */
+    map.addLayer({id:'org-dots',type:'circle',source:'orgs',minzoom:9,
+      paint:{
+        'circle-radius':['interpolate',['linear'],['zoom'],9,1.5,13,4,16,8],
+        'circle-color':['match',['get','ri'],0,'#3B82F6',1,'#EF4444',2,'#EAB308',3,'#F97316',4,'#22C55E','#A855F7'],
+        'circle-opacity':['interpolate',['linear'],['zoom'],9,0,10,0.7],
+        'circle-stroke-width':0.5,'circle-stroke-color':'rgba(0,0,0,0.3)'
+      }});
+
+    /* ── Uniform lighting ─────────────────────────── */
+    try {
+      map.setLight({ anchor: 'viewport', position: [1.5, 0, 45], color: '#fff', intensity: 0.5 });
+    } catch(e) {}
+
+    setViewMode('hex');
+    updateFilters();
+    startSpin();
+    setL(100,'Ready');
+    setTimeout(()=>document.getElementById('loading').classList.add('hidden'),600);
+
+    /* ── Interactions: click on hex zones ─────────── */
+    const allClickLayers = ['hex-extrusion','highlight-extrusion',...Array.from({length:6},(_,i)=>'stacked-'+i)];
+    allClickLayers.forEach(id=>{
+      map.on('click',id,e=>{e.preventDefault();if(e.features&&e.features[0])showZoneInfo(e.features[0].properties);});
+    });
+    map.on('click','org-dots',e=>{e.preventDefault();if(e.features&&e.features[0])showOrgInfo(e.features[0].properties);});
+    map.on('click',e=>{if(!e.defaultPrevented)hideInfo();});
+
+    /* ── Hover interactions (desktop) / tap (mobile) ── */
+    if(!IS_MOBILE){
+      const hoverLayers = [...allClickLayers, 'org-dots'];
+      hoverLayers.forEach(id=>{
+        map.on('mouseenter',id,()=>{map.getCanvas().style.cursor='pointer';});
+        map.on('mouseleave',id,()=>{map.getCanvas().style.cursor='';});
+      });
+      /* Show info on hover for zone layers */
+      let hoverTimeout = null;
+      allClickLayers.forEach(id => {
+        map.on('mousemove', id, e => {
+          if (e.features && e.features[0]) {
+            clearTimeout(hoverTimeout);
+            showZoneInfo(e.features[0].properties);
+          }
+        });
+      });
+      map.on('mousemove', 'org-dots', e => {
+        if (e.features && e.features[0]) {
+          clearTimeout(hoverTimeout);
+          showOrgInfo(e.features[0].properties);
+        }
+      });
+      /* Hide on mouse leave with a small delay */
+      [...allClickLayers, 'org-dots'].forEach(id => {
+        map.on('mouseleave', id, () => {
+          hoverTimeout = setTimeout(hideInfo, 200);
+        });
+      });
+    }
+  });
+
+  /* ── View modes ──────────────────────────────────── */
+  const ALL_ZONE=['hex-extrusion','highlight-extrusion',...Array.from({length:6},(_,i)=>'stacked-'+i)];
+  function setViewMode(m){
+    viewMode=m;
+    ALL_ZONE.forEach(id=>{try{map.setLayoutProperty(id,'visibility','none');}catch(e){}});
+    if(m==='hex'){ for(let i=0;i<6;i++){if(activeReligions.has(REL[i]))map.setLayoutProperty('stacked-'+i,'visibility','visible');} recalcStacked(); }
+    else if(m==='highlight') map.setLayoutProperty('highlight-extrusion','visibility','visible');
+    updateFilters(); updateCount();
+  }
+
+  /* ── View toggle ─────────────────────────────────── */
+  const viewBtns=document.querySelectorAll('#view-toggle .mode-btn');
+  const hintEl=document.getElementById('filter-hint');
+  viewBtns.forEach(btn=>{btn.addEventListener('click',()=>{
+    viewBtns.forEach(b=>b.classList.toggle('active',b===btn));
+    highlightedReligion=null; activeReligions=new Set(REL);
+    for(const r of REL) filterItems[r].classList.remove('off','highlighted','dimmed');
+    setViewMode(btn.dataset.view);
+    hintEl.textContent=btn.dataset.view==='highlight'?'Tap a religion to reveal':'Toggle religions on/off';
+  });});
+
+  /* ── Order toggle ───────────────────────────────── */
+  const orderBtns=document.querySelectorAll('#order-toggle .mode-btn');
+  orderBtns.forEach(btn=>{btn.addEventListener('click',()=>{
+    orderBtns.forEach(b=>b.classList.toggle('active',b===btn));
+    stackOrder=btn.dataset.order;
+    if(viewMode==='hex') recalcStacked();
+  });});
+
+  /* ── Score slider ────────────────────────────────── */
+  const slider=document.getElementById('score-slider'), scoreValEl=document.getElementById('score-value');
+  slider.addEventListener('input',()=>{scoreThreshold=+slider.value;scoreValEl.textContent=scoreThreshold;updateFilters();});
+
+  /* ── Filter click ────────────────────────────────── */
+  function onFilterClick(rel){
+    if(viewMode==='highlight'){
+      if(highlightedReligion===rel){highlightedReligion=null;for(const r of REL)filterItems[r].classList.remove('highlighted','dimmed');}
+      else{highlightedReligion=rel;for(const r of REL){filterItems[r].classList.remove('highlighted','dimmed');filterItems[r].classList.add(r===rel?'highlighted':'dimmed');}}
+      updateHighlight();
+    } else {
+      if(activeReligions.has(rel)){activeReligions.delete(rel);filterItems[rel].classList.add('off');}
+      else{activeReligions.add(rel);filterItems[rel].classList.remove('off');}
+      if(viewMode==='hex'){for(let i=0;i<6;i++)map.setLayoutProperty('stacked-'+i,'visibility',activeReligions.has(REL[i])?'visible':'none');recalcStacked();}
+      updateFilters();
+    }
+    updateCount();
+  }
+
+  /* ── Filters ─────────────────────────────────────── */
+  function updateFilters(){
+    if(!map||!map.isStyleLoaded()) return;
+    const sf=scoreThreshold>0?['>=',['get','as'],scoreThreshold]:null;
+    for(let i=0;i<6;i++){const f=['all',['>',['get','r'+i],0]];if(sf)f.push(sf);map.setFilter('stacked-'+i,f);}
+    if(viewMode==='highlight') updateHighlight();
+    updateOrgFilter();
+    updateCount();
+  }
+
+  function updateHighlight(){
+    if(!highlightedReligion){map.setFilter('highlight-extrusion',['==',['get','dr'],'__none__']);return;}
+    const ri=REL.indexOf(highlightedReligion);
+    map.setPaintProperty('highlight-extrusion','fill-extrusion-color',COLORS[highlightedReligion]);
+    for(const ft of zonesGJ.features){
+      const p=ft.properties;
+      const frac=(p['r'+ri]||0)/Math.max(p.n,1);
+      p.hn=+(frac*p.norm).toFixed(6);
+    }
+    map.getSource('zones').setData(zonesGJ);
+    map.setPaintProperty('highlight-extrusion','fill-extrusion-height',hs('hn'));
+    const f=['all',['>',['get','r'+ri],0]];
+    if(scoreThreshold>0) f.push(['>=',['get','as'],scoreThreshold]);
+    map.setFilter('highlight-extrusion',f);
+  }
+
+  function recalcStacked(){
+    for(const f of zonesGJ.features){
+      const p=f.properties;
+      const entries=[];
+      for(let i=0;i<6;i++){
+        if(!activeReligions.has(REL[i])||p['r'+i]===0) continue;
+        entries.push({i, frac:p['r'+i]/p.n});
+      }
+      if(stackOrder==='dom-min') entries.sort((a,b)=>b.frac-a.frac);
+      else entries.sort((a,b)=>a.frac-b.frac);
+      for(let i=0;i<6;i++){p['b'+i]=0;p['t'+i]=0;}
+      let cum=0;
+      for(const e of entries){
+        p['b'+e.i]=+(cum*p.norm).toFixed(6);
+        cum+=e.frac;
+        p['t'+e.i]=+(cum*p.norm).toFixed(6);
+      }
+    }
+    map.getSource('zones').setData(zonesGJ);
+  }
+
+  function updateOrgFilter(){
+    if(!map||!map.isStyleLoaded()) return;
+    const f=['all'];
+    if(activeReligions.size<6) f.push(['in',['get','ri'],['literal',[...activeReligions].map(r=>REL.indexOf(r))]]);
+    map.setFilter('org-dots',f.length>1?f:null);
+  }
+
+  /* ── Org tiles ───────────────────────────────────── */
+  map.on('moveend',()=>{if(map.getZoom()>=8.5)loadOrgTiles();updateCount();});
+  function loadOrgTiles(){
+    const b=map.getBounds(),cLat=map.getCenter().lat,cLng=map.getCenter().lng;
+    const latS=b.getNorth()-b.getSouth(),lngS=b.getEast()-b.getWest();
+    const latMin=Math.floor((cLat-latS*0.3)/TILE_SIZE)*TILE_SIZE;
+    const latMax=Math.floor((cLat+latS*0.3)/TILE_SIZE)*TILE_SIZE;
+    const lngMin=Math.floor((cLng-lngS*0.3)/TILE_SIZE)*TILE_SIZE;
+    const lngMax=Math.floor((cLng+lngS*0.3)/TILE_SIZE)*TILE_SIZE;
+    let pending=0;
+    for(let tLat=latMin;tLat<=latMax;tLat+=TILE_SIZE){
+      for(let tLng=lngMin;tLng<=lngMax;tLng+=TILE_SIZE){
+        let nLng=tLng; if(nLng>180)nLng-=360; if(nLng<-180)nLng+=360;
+        const k=`${tLat}_${nLng}`; if(!tileIndex[k]||loadedTiles[k]||loadingTiles.has(k)) continue;
+        loadingTiles.add(k); pending++;
+        fetch(`data/tiles/${k}.json`).then(r=>r.json()).then(data=>{
+          loadedTiles[k]=data; loadingTiles.delete(k); pending--;
+          rebuildOrgs(); if(pending===0)showToast('');
+        }).catch(()=>{loadingTiles.delete(k);pending--;});
+      }
+    }
+    if(pending>0)showToast(`Loading ${pending} tile${pending>1?'s':''}...`);
+  }
+  function rebuildOrgs(){
+    const feats=[];
+    for(const data of Object.values(loadedTiles)){
+      for(const o of data) feats.push({type:'Feature',geometry:{type:'Point',coordinates:[o[1],o[0]]},properties:{ri:o[2],di:o[3]}});
+    }
+    orgsGJ={type:'FeatureCollection',features:feats};
+    if(map.getSource('orgs')) map.getSource('orgs').setData(orgsGJ);
+  }
+
+  /* ── Auto-rotation ───────────────────────────────── */
+  function startSpin(){
+    function spin(t){
+      if(!isRotating) return;
+      if(lastSpin){const dt=Math.min(t-lastSpin,50);const c=map.getCenter();map.jumpTo({center:[c.lng-dt*0.003,c.lat]});}
+      lastSpin=t; requestAnimationFrame(spin);
+    }
+    requestAnimationFrame(spin);
+  }
+  function stopRot(){isRotating=false;lastSpin=0;}
+  ['mousedown','touchstart','wheel'].forEach(t=>{map.getCanvas().addEventListener(t,stopRot,{passive:true});});
+  ['dragstart','zoomstart','rotatestart','pitchstart'].forEach(t=>{map.on(t,stopRot);});
+
+  /* ── Zoom indicator ──────────────────────────────── */
+  const zoomInd=document.getElementById('zoom-indicator');
+  map.on('zoom',()=>{const z=map.getZoom();zoomInd.textContent=z<3?'Globe':z<6?'Region':z<9?'Area':z<13?'City':'Street';});
+
+  /* ── Info panel ──────────────────────────────────── */
+  const infoPanel=document.getElementById('info-panel');
+  function showZoneInfo(p){
+    infoPanel.classList.add('visible');
+    document.getElementById('info-h3').textContent=p.h3||'';
+    document.getElementById('info-score').textContent=fmtNum(Math.round(typeof p.ts==='string'?parseFloat(p.ts):p.ts));
+    document.getElementById('info-score-label').textContent='Total Influence Score';
+    const as=typeof p.as==='string'?parseFloat(p.as):p.as;
+    document.getElementById('info-avg').textContent=as.toFixed(1);
+    document.getElementById('info-orgs').textContent=fmtNum(typeof p.n==='string'?parseInt(p.n):p.n);
+    const di=typeof p.di==='string'?parseInt(p.di):p.di;
+    document.getElementById('info-dominant').innerHTML=`<span style="color:${COLOR_ARR[di]}">${p.dr}</span>`;
+    const barsEl=document.getElementById('info-bars'); barsEl.innerHTML='';
+    const entries=[];
+    for(let i=0;i<6;i++){const c=typeof p['r'+i]==='string'?parseInt(p['r'+i]):(p['r'+i]||0);if(c>0)entries.push([REL[i],c,i]);}
+    entries.sort((a,b)=>b[1]-a[1]);
+    const n=typeof p.n==='string'?parseInt(p.n):p.n;
+    for(const[rel,count,idx] of entries){
+      const pct=count/n*100, row=document.createElement('div'); row.className='info-bar-row';
+      row.innerHTML=`<div class="info-bar-swatch" style="background:${COLOR_ARR[idx]}"></div><div class="info-bar-name">${rel}</div><div class="info-bar-count">${fmtNum(count)}</div><div class="info-bar-track"><div class="info-bar-fill" style="width:${pct.toFixed(0)}%;background:${COLOR_ARR[idx]}"></div></div>`;
+      barsEl.appendChild(row);
+    }
+  }
+  function showOrgInfo(p){
+    infoPanel.classList.add('visible');
+    document.getElementById('info-h3').textContent='';
+    const ri=typeof p.ri==='string'?parseInt(p.ri):p.ri;
+    document.getElementById('info-score').textContent=REL[ri]||'Unknown';
+    document.getElementById('info-score-label').textContent='Religion';
+    document.getElementById('info-avg').textContent='';
+    document.getElementById('info-orgs').textContent='';
+    const di=typeof p.di==='string'?parseInt(p.di):p.di;
+    document.getElementById('info-dominant').textContent=di>=0&&denomIdMap[di]?denomIdMap[di]:'\u2014';
+    document.getElementById('info-bars').innerHTML='';
+  }
+  function hideInfo(){infoPanel.classList.remove('visible');}
+
+  /* ── Visible count ───────────────────────────────── */
+  function updateCount(){
+    const el=document.getElementById('stat-visible');
+    if(map.getZoom()>=9&&orgsGJ.features.length>0){el.textContent=fmtNum(orgsGJ.features.length)+' orgs';return;}
+    let c=0;
+    for(const f of zonesGJ.features){
+      const p=f.properties;
+      if(p.as<scoreThreshold) continue;
+      if(viewMode==='highlight'&&highlightedReligion){const ri=REL.indexOf(highlightedReligion);if(p['r'+ri]===0)continue;}
+      c++;
+    }
+    el.textContent=fmtNum(c)+' zones';
+  }
+
+  /* ── Toast ───────────────────────────────────────── */
+  const toastEl=document.getElementById('tile-toast');
+  function showToast(m){toastEl.textContent=m;toastEl.classList.toggle('visible',!!m);}
+
+  /* ── Mobile sheet ────────────────────────────────── */
+  const fp=document.getElementById('filter-panel'), ft=document.getElementById('filter-toggle');
+  const sb=document.getElementById('sheet-backdrop'), pc=document.getElementById('panel-close');
+  function openSheet(){fp.classList.add('open');sb.classList.add('visible');}
+  function closeSheet(){fp.classList.remove('open');sb.classList.remove('visible');}
+  ft.addEventListener('click',openSheet); sb.addEventListener('click',closeSheet); pc.addEventListener('click',closeSheet);
+
+  /* ── Helpers ─────────────────────────────────────── */
+  function fmtNum(n){if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e4)return(n/1e3).toFixed(0)+'K';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return typeof n==='number'?n.toLocaleString():n;}
+
+})();
+</script>
+</body>
+</html>
