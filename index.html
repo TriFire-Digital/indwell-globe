@@ -492,7 +492,7 @@
 
     /* ── Uniform lighting (viewport-anchored to prevent blowout on tilt) ── */
     try {
-      map.setLight({ anchor: 'viewport', color: '#ffffff', intensity: 0.3, position: [1.5, 0, 90] });
+      /* no artificial light — rely on fill-extrusion default illumination */
     } catch(e) {}
 
     setViewMode('hex');
